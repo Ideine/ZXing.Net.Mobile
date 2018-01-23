@@ -15,12 +15,12 @@ namespace ZXing.Mobile.CameraAccess
         private bool _wasScanned;
         IScannerSessionHost _scannerHost;
 
-        public CameraAnalyzer(SurfaceView surfaceView, IScannerSessionHost scannerHost)
+        public CameraAnalyzer(TextureView textureView, IScannerSessionHost scannerHost)
         {
             _scannerHost = scannerHost;
             _cameraEventListener = new CameraEventsListener();
-            _cameraController = new CameraController(surfaceView, _cameraEventListener, scannerHost);
-            Torch = new Torch(_cameraController, surfaceView.Context);
+			_cameraController = new CameraController(textureView, _cameraEventListener, scannerHost);
+			Torch = new Torch(_cameraController, textureView.Context);
         }
 
         public event EventHandler<Result> BarcodeFound;

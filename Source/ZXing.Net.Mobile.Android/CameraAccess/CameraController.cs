@@ -15,17 +15,17 @@ namespace ZXing.Mobile.CameraAccess
     public class CameraController
     {
         private readonly Context _context;
-        private readonly ISurfaceHolder _holder;
-        private readonly SurfaceView _surfaceView;
+        private readonly SurfaceTexture _surfaceTexture;
+		private readonly TextureView _textureView;
         private readonly CameraEventsListener _cameraEventListener;
         private int _cameraId;
 		IScannerSessionHost _scannerHost;
 
-        public CameraController(SurfaceView surfaceView, CameraEventsListener cameraEventListener, IScannerSessionHost scannerHost)
+		public CameraController(TextureView textureView, CameraEventsListener cameraEventListener, IScannerSessionHost scannerHost)
         {
-            _context = surfaceView.Context;
-            _holder = surfaceView.Holder;
-            _surfaceView = surfaceView;
+			_context = textureView.Context;
+			_textureView = textureView;
+			_surfaceTexture = textureView.SurfaceTexture;
             _cameraEventListener = cameraEventListener;
 			_scannerHost = scannerHost;
         }
@@ -36,13 +36,13 @@ namespace ZXing.Mobile.CameraAccess
 
         public void RefreshCamera()
         {
-            if (_holder == null) return;
+            if (_surfaceTexture == null) return;
 
             ApplyCameraSettings();
 
             try
             {
-                Camera.SetPreviewDisplay(_holder);
+                Camera.SetPreviewTexture(_surfaceTexture);
                 Camera.StartPreview();
             }
             catch (Exception ex)
@@ -68,7 +68,7 @@ namespace ZXing.Mobile.CameraAccess
 
             try
             {
-                Camera.SetPreviewDisplay(_holder);
+				Camera.SetPreviewTexture(_surfaceTexture);
                 
 
                 var previewParameters = Camera.GetParameters();
@@ -116,8 +116,8 @@ namespace ZXing.Mobile.CameraAccess
         {
             // The bounds for focus areas are actually -1000 to 1000
             // So we need to translate the touch coordinates to this scale
-            var focusX = x / _surfaceView.Width * 2000 - 1000;
-            var focusY = y / _surfaceView.Height * 2000 - 1000;
+            var focusX = x / _textureView.Width * 2000 - 1000;
+			var focusY = y / _textureView.Height * 2000 - 1000;
 
             // Call the autofocus with our coords
             AutoFocus(focusX, focusY, true);

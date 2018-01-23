@@ -7,185 +7,151 @@ using ZXing.Mobile.CameraAccess;
 
 namespace ZXing.Mobile
 {
-    public class ZXingSurfaceView : SurfaceView, ISurfaceHolderCallback, IScannerView, IScannerSessionHost
-    {
-        public ZXingSurfaceView(Context context, MobileBarcodeScanningOptions options)
-            : base(context)
-        {
-            ScanningOptions = options ?? new MobileBarcodeScanningOptions();
-            Init();
-        }
+	public class ZXingSurfaceView : TextureView, TextureView.ISurfaceTextureListener, IScannerView, IScannerSessionHost
+	{
+		public ZXingSurfaceView(Context context, MobileBarcodeScanningOptions options)
+			: base(context)
+		{
+			ScanningOptions = options ?? new MobileBarcodeScanningOptions();
+			Init();
+		}
 
-        protected ZXingSurfaceView(IntPtr javaReference, JniHandleOwnership transfer)
-            : base(javaReference, transfer)
-        {
-            Init();
-        }
+		protected ZXingSurfaceView(IntPtr javaReference, JniHandleOwnership transfer)
+			: base(javaReference, transfer)
+		{
+			Init();
+		}
 
 		bool addedHolderCallback = false;
 
-        private void Init()
-        {
+		private void Init()
+		{
+			if (!addedHolderCallback)
+			{
+				this.SurfaceTextureListener = this;
+				addedHolderCallback = true;
+			}
+		}
+
+		public async void OnSurfaceTextureAvailable(SurfaceTexture surface, int width, int height)
+		{
+			await ZXing.Net.Mobile.Android.PermissionsHandler.PermissionRequestTask;
+
 			if (_cameraAnalyzer == null)
-	            _cameraAnalyzer = new CameraAnalyzer(this, this);
+				_cameraAnalyzer = new CameraAnalyzer(this, this);
 
 			_cameraAnalyzer.ResumeAnalysis();
 
-			if (!addedHolderCallback) {
-				Holder.AddCallback(this);
-				Holder.SetType(SurfaceType.PushBuffers);
-				addedHolderCallback = true;
-			}
-        }
+			_cameraAnalyzer.SetupCamera();
+		}
 
-        public async void SurfaceCreated(ISurfaceHolder holder)
-        {
-            await ZXing.Net.Mobile.Android.PermissionsHandler.PermissionRequestTask;
-
-            _cameraAnalyzer.SetupCamera();
-        }
-
-        public async void SurfaceChanged(ISurfaceHolder holder, Format format, int wx, int hx)
-        {
-            await ZXing.Net.Mobile.Android.PermissionsHandler.PermissionRequestTask;
-
-            _cameraAnalyzer.RefreshCamera();
-        }
-
-        public async void SurfaceDestroyed(ISurfaceHolder holder)
-        {
-            await ZXing.Net.Mobile.Android.PermissionsHandler.PermissionRequestTask;
-
-            try {
-				if (addedHolderCallback) {
-					Holder.RemoveCallback(this);
+		public bool OnSurfaceTextureDestroyed(SurfaceTexture surface)
+		{
+			try
+			{
+				if (addedHolderCallback)
+				{
+					this.SurfaceTextureListener = null;
 					addedHolderCallback = false;
 				}
-            } catch { }
+			}
+			catch
+			{
+			}
 
-            _cameraAnalyzer.ShutdownCamera();
-        }
+			_cameraAnalyzer?.ShutdownCamera();
 
-        public override bool OnTouchEvent(MotionEvent e)
-        {
-            var r = base.OnTouchEvent(e);
+			return true;
+		}
 
-            switch (e.Action)
-            {
-                case MotionEventActions.Down:
-                    return true;
-                case MotionEventActions.Up:
-                    var touchX = e.GetX();
-                    var touchY = e.GetY();
-                    this.AutoFocus((int)touchX, (int)touchY);
-                    break;
-            }
+		public async void OnSurfaceTextureSizeChanged(SurfaceTexture surface, int width, int height)
+		{
+			await ZXing.Net.Mobile.Android.PermissionsHandler.PermissionRequestTask;
 
-            return r;
-        }
+			_cameraAnalyzer?.RefreshCamera();
+		}
 
-        public void AutoFocus()
-        {
-            _cameraAnalyzer.AutoFocus();
-        }
+		public void OnSurfaceTextureUpdated(SurfaceTexture surface)
+		{
 
-        public void AutoFocus(int x, int y)
-        {
-            _cameraAnalyzer.AutoFocus(x, y);
-        }
+		}
 
-        public void StartScanning(Action<Result> scanResultCallback, MobileBarcodeScanningOptions options = null)
-        {
-            ScanningOptions = options ?? MobileBarcodeScanningOptions.Default;
+		public override bool OnTouchEvent(MotionEvent e)
+		{
+			var r = base.OnTouchEvent(e);
 
-            _cameraAnalyzer.BarcodeFound += (sender, result) =>
-            {
-                scanResultCallback?.Invoke(result);
-            };
-            _cameraAnalyzer.ResumeAnalysis();
-        }
+			switch (e.Action)
+			{
+				case MotionEventActions.Down:
+					return true;
+				case MotionEventActions.Up:
+					var touchX = e.GetX();
+					var touchY = e.GetY();
+					this.AutoFocus((int)touchX, (int)touchY);
+					break;
+			}
 
-        public void StopScanning()
-        {
-            _cameraAnalyzer.ShutdownCamera();
-        }
+			return r;
+		}
 
-        public void PauseAnalysis()
-        {
-            _cameraAnalyzer.PauseAnalysis();
-        }
+		public void AutoFocus()
+		{
+			_cameraAnalyzer.AutoFocus();
+		}
 
-        public void ResumeAnalysis()
-        {
-            _cameraAnalyzer.ResumeAnalysis();
-        }
+		public void AutoFocus(int x, int y)
+		{
+			_cameraAnalyzer.AutoFocus(x, y);
+		}
 
-        public void Torch(bool on)
-        {
-            if (on)
-                _cameraAnalyzer.Torch.TurnOn();
-            else
-                _cameraAnalyzer.Torch.TurnOff();
-        }
+		public void StartScanning(Action<Result> scanResultCallback, MobileBarcodeScanningOptions options = null)
+		{
+			ScanningOptions = options ?? MobileBarcodeScanningOptions.Default;
 
-        public void ToggleTorch()
-        {
-            _cameraAnalyzer.Torch.Toggle();
-        }
+			_cameraAnalyzer.BarcodeFound += (sender, result) =>
+			{
+				scanResultCallback?.Invoke(result);
+			};
+			_cameraAnalyzer.ResumeAnalysis();
+		}
 
-        public MobileBarcodeScanningOptions ScanningOptions { get; set; }
+		public void StopScanning()
+		{
+			_cameraAnalyzer.ShutdownCamera();
+		}
 
-        public bool IsTorchOn => _cameraAnalyzer.Torch.IsEnabled;
+		public void PauseAnalysis()
+		{
+			_cameraAnalyzer.PauseAnalysis();
+		}
 
-        public bool IsAnalyzing => _cameraAnalyzer.IsAnalyzing;
+		public void ResumeAnalysis()
+		{
+			_cameraAnalyzer.ResumeAnalysis();
+		}
 
-        private CameraAnalyzer _cameraAnalyzer;
+		public void Torch(bool on)
+		{
+			if (on)
+				_cameraAnalyzer.Torch.TurnOn();
+			else
+				_cameraAnalyzer.Torch.TurnOff();
+		}
 
-        public bool HasTorch => _cameraAnalyzer.Torch.IsSupported;
+		public void ToggleTorch()
+		{
+			_cameraAnalyzer.Torch.Toggle();
+		}
 
+		public MobileBarcodeScanningOptions ScanningOptions { get; set; }
 
-        #region possibl future drawing code
+		public bool IsTorchOn => _cameraAnalyzer.Torch.IsEnabled;
 
-        //        private void drawResultPoints (Bitmap barcode, ZXing.Result rawResult)
-        //        {
-        //            var points = rawResult.ResultPoints;
-        //          
-        //            if (points != null && points.Length > 0) {
-        //                var canvas = new Canvas (barcode);
-        //                Paint paint = new Paint ();
-        //                paint.Color = Android.Graphics.Color.White;
-        //                paint.StrokeWidth = 3.0f;
-        //                paint.SetStyle (Paint.Style.Stroke);
-        //              
-        //                var border = new RectF (2, 2, barcode.Width - 2, barcode.Height - 2);
-        //                canvas.DrawRect (border, paint);
-        //              
-        //                paint.Color = Android.Graphics.Color.Purple;
-        //              
-        //                if (points.Length == 2) {
-        //                    paint.StrokeWidth = 4.0f;
-        //                    drawLine (canvas, paint, points [0], points [1]);
-        //                } else if (points.Length == 4 &&
-        //                (rawResult.BarcodeFormat == BarcodeFormat.UPC_A ||
-        //                rawResult.BarcodeFormat == BarcodeFormat.EAN_13)) {
-        //                    // Hacky special case -- draw two lines, for the barcode and metadata
-        //                    drawLine (canvas, paint, points [0], points [1]);
-        //                    drawLine (canvas, paint, points [2], points [3]);
-        //                } else {
-        //                    paint.StrokeWidth = 10.0f;
-        //                  
-        //                    foreach (ResultPoint point in points)
-        //                        canvas.DrawPoint (point.X, point.Y, paint);
-        //                }
-        //            }
-        //        }
+		public bool IsAnalyzing => _cameraAnalyzer.IsAnalyzing;
 
-        //        private void drawLine (Canvas canvas, Paint paint, ResultPoint a, ResultPoint b)
-        //        {
-        //            canvas.DrawLine (a.X, a.Y, b.X, b.Y, paint);
-        //        }
+		private CameraAnalyzer _cameraAnalyzer;
 
-        #endregion
+		public bool HasTorch => _cameraAnalyzer.Torch.IsSupported;
 
 		protected override void OnAttachedToWindow()
 		{
@@ -201,5 +167,5 @@ namespace ZXing.Mobile
 			if (visibility == ViewStates.Visible)
 				Init();
 		}
-    }
+	}
 }
