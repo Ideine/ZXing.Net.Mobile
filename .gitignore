@@ -47,3 +47,4 @@ tools/
 .DS_Store
 .vscode/
 
+.idea/
