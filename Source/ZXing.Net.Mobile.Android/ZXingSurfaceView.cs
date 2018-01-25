@@ -4,13 +4,15 @@ using Android.Runtime;
 using Android.Views;
 using Android.Graphics;
 using ZXing.Mobile.CameraAccess;
+using System.Threading.Tasks;
 
 namespace ZXing.Mobile
 {
 	public class ZXingSurfaceView : TextureView, TextureView.ISurfaceTextureListener, IScannerView, IScannerSessionHost
 	{
-		public ZXingSurfaceView(Context context, MobileBarcodeScanningOptions options)
-			: base(context)
+		private readonly TaskCompletionSource<bool> _initialized = new TaskCompletionSource<bool>();
+
+		public ZXingSurfaceView(Context context, MobileBarcodeScanningOptions options) : base(context)
 		{
 			ScanningOptions = options ?? new MobileBarcodeScanningOptions();
 			Init();
@@ -37,8 +39,12 @@ namespace ZXing.Mobile
 		{
 			await ZXing.Net.Mobile.Android.PermissionsHandler.PermissionRequestTask;
 
+
 			if (_cameraAnalyzer == null)
+			{
 				_cameraAnalyzer = new CameraAnalyzer(this, this);
+				_initialized.SetResult(true);
+			}
 
 			_cameraAnalyzer.ResumeAnalysis();
 
@@ -104,9 +110,11 @@ namespace ZXing.Mobile
 			_cameraAnalyzer.AutoFocus(x, y);
 		}
 
-		public void StartScanning(Action<Result> scanResultCallback, MobileBarcodeScanningOptions options = null)
+		public async void StartScanning(Action<Result> scanResultCallback, MobileBarcodeScanningOptions options = null)
 		{
 			ScanningOptions = options ?? MobileBarcodeScanningOptions.Default;
+
+			await _initialized.Task;
 
 			_cameraAnalyzer.BarcodeFound += (sender, result) =>
 			{
