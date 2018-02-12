@@ -4,6 +4,8 @@ using Android.Views;
 using Android.Widget;
 using Android.Support.V4.App;
 using System.Threading.Tasks;
+using Android;
+using Android.Runtime;
 
 namespace ZXing.Mobile
 {
@@ -11,177 +13,152 @@ namespace ZXing.Mobile
 	{
 		private readonly TaskCompletionSource<bool> _initialized = new TaskCompletionSource<bool>();
 
+		public View CustomOverlayView { get; set; }
+
+		public bool UseCustomOverlayView { get; set; }
+
+		public MobileBarcodeScanningOptions ScanningOptions { get; set; }
+
+		public string TopText { get; set; }
+
+		public string BottomText { get; set; }
+
+		private FrameLayout _frame;
+
+		private ZXingSurfaceView _scanner;
+
+		private ZxingOverlayView _zxingOverlay;
+
+		private Action<Result> _scanCallback;
+
 		public ZXingScannerFragment()
 		{
 			UseCustomOverlayView = false;
 		}
 
-		FrameLayout frame;
+		protected ZXingScannerFragment(IntPtr javaRef, JniHandleOwnership transfer) : base(javaRef, transfer) { }
 
-		public override View OnCreateView(LayoutInflater layoutInflater, ViewGroup viewGroup, Bundle bundle)
+
+		public override View OnCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState)
 		{
-			frame = (FrameLayout)layoutInflater.Inflate(Resource.Layout.zxingscannerfragmentlayout, viewGroup, false);
+			_frame = (FrameLayout)inflater.Inflate(Resource.Layout.zxingscannerfragmentlayout, container, false);
 
-			var layoutParams = getChildLayoutParams();
-
-			try
+			using (var layoutParams = GetChildLayoutParams())
 			{
-				scanner = new ZXingSurfaceView(this.Activity, ScanningOptions);
-
-				_initialized.SetResult(true);
-
-				frame.AddView(scanner, layoutParams);
-
-
-				if (!UseCustomOverlayView)
+				try
 				{
-					zxingOverlay = new ZxingOverlayView(this.Activity);
-					zxingOverlay.TopText = TopText ?? "";
-					zxingOverlay.BottomText = BottomText ?? "";
+					_scanner = new ZXingSurfaceView(Activity, ScanningOptions);
 
-					frame.AddView(zxingOverlay, layoutParams);
+					_initialized.SetResult(true);
+
+					_frame.AddView(_scanner, layoutParams);
+
+
+					if (!UseCustomOverlayView)
+					{
+						_zxingOverlay = new ZxingOverlayView(Activity)
+						{
+							TopText = TopText ?? "",
+							BottomText = BottomText ?? ""
+						};
+						_frame.AddView(_zxingOverlay, layoutParams);
+					}
+					else if (CustomOverlayView != null)
+					{
+						_frame.AddView(CustomOverlayView, layoutParams);
+					}
 				}
-				else if (CustomOverlayView != null)
+				catch (Exception ex)
 				{
-					frame.AddView(CustomOverlayView, layoutParams);
+					Console.WriteLine("Create Surface View Failed: " + ex);
 				}
-			}
-			catch (Exception ex)
-			{
-				Console.WriteLine("Create Surface View Failed: " + ex);
 			}
 
 			Android.Util.Log.Debug(MobileBarcodeScanner.TAG, "ZXingScannerFragment->OnResume exit");
 
-			return frame;
+			return _frame;
 		}
 
 		public override void OnStart()
 		{
 			base.OnStart();
 			// won't be 0 if OnCreateView has been called before.
-			if (frame.ChildCount == 0)
+			if (_frame.ChildCount == 0)
 			{
-				var layoutParams = getChildLayoutParams();
-				// reattach scanner and overlay views.
-				frame.AddView(scanner, layoutParams);
+				using (var layoutParams = GetChildLayoutParams())
+				{
+					// reattach scanner and overlay views.
+					_frame.AddView(_scanner, layoutParams);
 
-				if (!UseCustomOverlayView)
-					frame.AddView(zxingOverlay, layoutParams);
-				else if (CustomOverlayView != null)
-					frame.AddView(CustomOverlayView, layoutParams);
+					if (!UseCustomOverlayView)
+					{
+						_frame.AddView(_zxingOverlay, layoutParams);
+					}
+					else if (CustomOverlayView != null)
+					{
+						_frame.AddView(CustomOverlayView, layoutParams);
+					}
+				}
 			}
 		}
 
 		public override void OnStop()
 		{
-			if (scanner != null)
+			if (_scanner != null)
 			{
-				scanner.StopScanning();
+				_scanner.StopScanning();
 
-				frame.RemoveView(scanner);
+				_frame?.RemoveView(_scanner);
 			}
 
 			if (!UseCustomOverlayView)
-				frame.RemoveView(zxingOverlay);
+			{
+				_frame?.RemoveView(_zxingOverlay);
+			}
 			else if (CustomOverlayView != null)
-				frame.RemoveView(CustomOverlayView);
+			{
+				_frame?.RemoveView(CustomOverlayView);
+			}
 
 			base.OnStop();
 		}
 
-		private LinearLayout.LayoutParams getChildLayoutParams()
-		{
-			var layoutParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.MatchParent);
-			layoutParams.Weight = 1;
-			return layoutParams;
-		}
-
-		public View CustomOverlayView { get; set; }
-		public bool UseCustomOverlayView { get; set; }
-		public MobileBarcodeScanningOptions ScanningOptions { get; set; }
-		public string TopText { get; set; }
-		public string BottomText { get; set; }
-
-		ZXingSurfaceView scanner;
-		ZxingOverlayView zxingOverlay;
-
-		public void Torch(bool on)
-		{
-			scanner?.Torch(on);
-		}
-
-		public void AutoFocus()
-		{
-			scanner?.AutoFocus();
-		}
-
-		public void AutoFocus(int x, int y)
-		{
-			scanner?.AutoFocus(x, y);
-		}
-
-		Action<Result> scanCallback;
-		//bool scanImmediately = false;
-
 		public async void StartScanning(Action<Result> scanResultHandler, MobileBarcodeScanningOptions options = null)
 		{
 			ScanningOptions = options;
-			scanCallback = scanResultHandler;
+			_scanCallback = scanResultHandler;
 
 			await _initialized.Task;
 
-			scan();
+			Scan();
 		}
 
-		void scan()
+		private LinearLayout.LayoutParams GetChildLayoutParams() => new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.MatchParent)
 		{
-			scanner?.StartScanning(scanCallback, ScanningOptions);
-		}
+			Weight = 1
+		};
 
-		public void StopScanning()
-		{
-			scanner?.StopScanning();
-		}
+		public void Torch(bool on) => _scanner?.Torch(on);
 
-		public void PauseAnalysis()
-		{
-			scanner?.PauseAnalysis();
-		}
+		public void AutoFocus() => _scanner?.AutoFocus();
 
-		public void ResumeAnalysis()
-		{
-			scanner?.ResumeAnalysis();
-		}
+		public void AutoFocus(int x, int y) => _scanner?.AutoFocus(x, y);
 
-		public void ToggleTorch()
-		{
-			scanner?.ToggleTorch();
-		}
+		private void Scan() => _scanner?.StartScanning(_scanCallback, ScanningOptions);
 
-		public bool IsTorchOn
-		{
-			get
-			{
-				return scanner?.IsTorchOn ?? false;
-			}
-		}
+		public void StopScanning() => _scanner?.StopScanning();
 
-		public bool IsAnalyzing
-		{
-			get
-			{
-				return scanner?.IsAnalyzing ?? false;
-			}
-		}
+		public void PauseAnalysis() => _scanner?.PauseAnalysis();
 
-		public bool HasTorch
-		{
-			get
-			{
-				return scanner?.HasTorch ?? false;
-			}
-		}
+		public void ResumeAnalysis() => _scanner?.ResumeAnalysis();
+
+		public void ToggleTorch() => _scanner?.ToggleTorch();
+
+		public bool IsTorchOn => _scanner?.IsTorchOn ?? false;
+
+		public bool IsAnalyzing => _scanner?.IsAnalyzing ?? false;
+
+		public bool HasTorch => _scanner?.HasTorch ?? false;
 	}
 }
 
